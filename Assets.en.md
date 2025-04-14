@@ -44,7 +44,10 @@ class UserAssetsView(APIView):
             'name': asset.name,
             'type': asset.type,
             'url': asset.get_secure_url(),
-            'created_at': asset.created_at
+            'created_at': asset.created_at,
+            'thumbnail': asset.get_thumbnail_url() if asset.type == 'video' else None,
+            'duration': asset.get_duration() if asset.type == 'video' else None,
+            'description': asset.description or ''
         } for asset in assets]
         
         return Response(data)
@@ -248,9 +251,11 @@ def display_user_assets(request):
             {
                 'name': asset['name'],
                 'url': asset['url'],
-                'thumbnail': asset.get('thumbnail_url'),
+                'thumbnail': asset.get('thumbnail_url') if asset['type'] == 'video' else asset.get('thumbnail'),
                 'size': asset.get('size', 0),
-                'type': asset['type']
+                'type': asset['type'],
+                'duration': asset.get('duration') if asset['type'] == 'video' else None,
+                'description': asset.get('description', '')
             }
             for asset in assets
         ]
