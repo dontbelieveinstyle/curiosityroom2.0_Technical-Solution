@@ -289,7 +289,7 @@ def display_user_assets(request):
 
 ## Changelog
 
-- v1.0.0 (2025-04-15)
+- v1.0.0 (2025-04-14)
   - Initial version
   - Basic resource access functionality
   - Security authentication mechanism
