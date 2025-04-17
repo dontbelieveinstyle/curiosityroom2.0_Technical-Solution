@@ -77,7 +77,7 @@ def redirect_to_target_site(request):
     SECRET_KEY = 'your-shared-secret-key'
     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
     
-    target_site_url = 'curiosityroom.xrexp.io/sso/login/'
+    target_site_url = 'https://curiosityroom.xrexp.io/user/sso/login/'
     redirect_url = f'{target_site_url}?token={token}'
     
     return redirect(redirect_url)
