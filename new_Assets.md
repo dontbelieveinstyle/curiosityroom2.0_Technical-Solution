@@ -18,37 +18,92 @@ sequenceDiagram
     SiteB->>SiteA: 4. 使用令牌请求资源
     SiteA-->>SiteB: 5. 返回资源数据
 ```
+### 2. 自定义JWT验证机制
+新建文件custom_jwt_authentication.py
 
-### 2. API 端点设计
+```python
+# artdott.com api/custom_jwt_authentication.py
+
+# custom_jwt_authentication.py
+
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+import jwt
+from django.conf import settings
+from django.contrib.auth.models import User
+
+
+class CustomJWTAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        # 从请求头中获取 Authorization 字段
+        auth_header = request.headers.get('Authorization')
+
+        if not auth_header:
+            raise AuthenticationFailed('Authorization header missing')
+
+        # 检查 Authorization header 的格式
+        parts = auth_header.split()
+
+        if parts[0].lower() != 'bearer':
+            raise AuthenticationFailed('Authorization header must start with Bearer')
+
+        if len(parts) == 1:
+            raise AuthenticationFailed('Token not found')
+
+        elif len(parts) > 2:
+            raise AuthenticationFailed('Authorization header must be Bearer token')
+
+        token = parts[1]
+
+        try:
+            # 使用你的密钥解码自定义 JWT token
+            payload = jwt.decode(token, settings.JWT_AUTH['JWT_SECRET_KEY'], algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed('Token is expired')
+        except jwt.InvalidTokenError:
+            raise AuthenticationFailed('Invalid token')
+
+
+        username = payload.get('username')
+        print(username)
+        # 从数据库查询用户（根据 user_id）
+        user = User.objects.filter(username=username).first()
+
+        if not user:
+            raise AuthenticationFailed('User not found')
+
+        return (user, token)  # 返回用户和 token
+
+```
+### 3. API 端点设计
 
 #### artdott.com API 端点
 
 ```python
 # artdott.com api/views.py
 
+from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_jwt.authentication import JSONWebTokenAuthentication
+
+from .custom_jwt_authentication import CustomJWTAuthentication
+
 
 class UserAssetsView(APIView):
-    authentication_classes = [JSONWebTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [CustomJWTAuthentication]  # 使用自定义认证类
+    permission_classes = [IsAuthenticated]  # 需要用户认证
 
     def get(self, request):
         user = request.user
-        assets = Asset.objects.filter(user=user)
-        
+        assets = User.objects.filter(username=user.username)  # 获取用户资源
+
         data = [{
             'id': asset.id,
-            'name': asset.name,
-            'type': asset.type,
-            'url': asset.get_secure_url(),
-            'created_at': asset.created_at,
-            'thumbnail': asset.get_thumbnail_url() if asset.type == 'video' else None,
-            'description': asset.description or ''
+            'name': asset.username,
+
         } for asset in assets]
-        
+
         return Response(data)
 
 # urls.py
@@ -62,57 +117,71 @@ urlpatterns = [
 ```python
 # curiosityroom.xrexp.io services.py
 
+# services.py
+
 import requests
+import jwt
+import time
 from django.conf import settings
 
+
 class AssetService:
-    def __init__(self, user):
-        self.user = user
-        self.base_url = settings.SITE_A_API_URL
-        
+    def __init__(self):
+
+        self.base_url = settings.SITE_A_API_URL  # 主服务器地址
+
     def get_access_token(self):
         """获取 artdott.com 的访问令牌"""
         payload = {
-            'user_id': self.user.id,
-            'username': self.user.username,
-            'exp': int(time.time()) + 3600
+
+            'username': 'wtl',
+            'exp': int(time.time()) + 3600  # 过期时间为1小时
         }
-        
+
+        # 生成 JWT token
         token = jwt.encode(payload, settings.SHARED_SECRET_KEY, algorithm='HS256')
         return token
-        
+
     def fetch_user_assets(self):
         """获取用户在 artdott.com 的资源"""
         token = self.get_access_token()
-        
+
         headers = {
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        
+
         response = requests.get(
             f'{self.base_url}/api/assets/',
             headers=headers
         )
-        
+
         if response.status_code == 200:
             return response.json()
         else:
             raise Exception('Failed to fetch assets')
 
+
 # curiosityroom.xrexp.io views.py
-class UserAssetsView(LoginRequiredMixin, View):
+from django import http
+from django.views import View
+from .services import AssetService
+
+
+
+class UserAssetsView(View):
     def get(self, request):
         try:
-            service = AssetService(request.user)
-            assets = service.fetch_user_assets()
-            
-            return render(request, 'assets/list.html', {
-                'assets': assets
-            })
+            service = AssetService()  # 获取服务实例
+            assets = service.fetch_user_assets()  # 获取资源
+
+            return http.JsonResponse({'assets': assets})
         except Exception as e:
-            messages.error(request, '无法获取资源列表')
-            return redirect('dashboard')
+            return http.JsonResponse({'assets': 'wrong'})
+# urls.py
+urlpatterns = [
+    path('test/', views.UserAssetsView.as_view(), name='fetch_resource'),
+]
 ```
 
 ## 安全配置
@@ -121,26 +190,42 @@ class UserAssetsView(LoginRequiredMixin, View):
 
 ```python
 # settings.py
+INSTALLED_APPS = [
+    ''''''
+    'rest_framework',
+    'corsheaders'
+]
 
-# JWT配置
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    ''''''
+]
 JWT_AUTH = {
-    'JWT_SECRET_KEY': 'your-shared-secret-key',
+    'JWT_SECRET_KEY': 'your-shared-secret-key',  # 共享密钥
     'JWT_ALGORITHM': 'HS256',
-    'JWT_EXPIRATION_DELTA': timedelta(hours=1),
+    'JWT_EXPIRATION_DELTA': timedelta(hours=1),  # Token 过期时间
     'JWT_ALLOW_REFRESH': True,
 }
 
-# CORS配置
+# CORS 配置（允许从 8888 端口访问）
 CORS_ALLOWED_ORIGINS = [
-    "https://curiosityroom.xrexp.io",
+    "https://curiosityroom.xrexp.io",  # 本地测试
 ]
 
 # 资源访问控制
 ASSET_ACCESS_CONTROL = {
-    'ALLOWED_SITES': ['curiosityroom.xrexp.io'],
+    'ALLOWED_SITES': ['https://curiosityroom.xrexp.io'],
     'MAX_REQUESTS_PER_HOUR': 1000,
-    'REQUIRE_HTTPS': True,
+    'REQUIRE_HTTPS': False,  # 允许 HTTP 请求（本地测试）
 }
+
+# REST_FRAMEWORK 配置
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'JWT1.custom_jwt_authentication.CustomJWTAuthentication',  # ！！！路径要自己填写！！！
+    ),
+}
+
 ```
 
 ### 2. curiosityroom.xrexp.io 配置
@@ -232,41 +317,7 @@ CACHES = {
    - 实现断点续传
    - 添加进度反馈
 
-## 使用示例
 
-```python
-# curiosityroom.xrexp.io 视图示例
-from .services import AssetService
-
-def display_user_assets(request):
-    service = AssetService(request.user)
-    
-    try:
-        # 获取用户资源
-        assets = service.fetch_user_assets()
-        
-        # 处理资源数据
-        processed_assets = [
-            {
-                'name': asset['name'],
-                'url': asset['url'],
-                'thumbnail': asset.get('thumbnail_url') if asset['type'] == 'video' else asset.get('thumbnail'),
-                'size': asset.get('size', 0),
-                'type': asset['type'],
-                'description': asset.get('description', '')
-            }
-            for asset in assets
-        ]
-        
-        return render(request, 'assets/gallery.html', {
-            'assets': processed_assets
-        })
-        
-    except Exception as e:
-        logger.error(f"Error fetching assets: {str(e)}")
-        messages.error(request, '获取资源时发生错误')
-        return redirect('dashboard')
-```
 
 ## 故障排除
 
