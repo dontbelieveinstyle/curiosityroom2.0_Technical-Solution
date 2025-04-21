@@ -18,7 +18,9 @@ sequenceDiagram
     SiteB->>SiteA: 4. 使用令牌请求资源
     SiteA-->>SiteB: 5. 返回资源数据
 ```
-### 2. 自定义JWT验证机制
+### 2. 下载库
+pip install django-cors-headers
+### 3. 自定义JWT验证机制
 新建文件custom_jwt_authentication.py
 
 ```python
@@ -75,9 +77,7 @@ class CustomJWTAuthentication(BaseAuthentication):
         return (user, token)  # 返回用户和 token
 
 ```
-### 3. API 端点设计
-
-#### artdott.com API 端点
+### 4. API 端点设计
 
 ```python
 # artdott.com api/views.py
