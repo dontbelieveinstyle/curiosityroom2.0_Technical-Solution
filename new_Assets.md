@@ -134,7 +134,7 @@ class AssetService:
         """获取 artdott.com 的访问令牌"""
         payload = {
 
-            'username': 'wtl',
+            'username': 'artdott',
             'exp': int(time.time()) + 3600  # 过期时间为1小时
         }
 
