@@ -38,24 +38,10 @@ from django.contrib.auth.models import User
 class CustomJWTAuthentication(BaseAuthentication):
     def authenticate(self, request):
         # 从请求头中获取 Authorization 字段
-        auth_header = request.headers.get('Authorization')
 
-        if not auth_header:
-            raise AuthenticationFailed('Authorization header missing')
-
-        # 检查 Authorization header 的格式
-        parts = auth_header.split()
-
-        if parts[0].lower() != 'bearer':
-            raise AuthenticationFailed('Authorization header must start with Bearer')
-
-        if len(parts) == 1:
-            raise AuthenticationFailed('Token not found')
-
-        elif len(parts) > 2:
-            raise AuthenticationFailed('Authorization header must be Bearer token')
-
-        token = parts[1]
+        token = request.GET.get('token')
+        if not token:
+            raise AuthenticationFailed('Authorization missing')
 
         try:
             # 使用你的密钥解码自定义 JWT token
@@ -96,12 +82,16 @@ class UserAssetsView(APIView):
 
     def get(self, request):
         user = request.user
-        assets = User.objects.filter(username=user.username)  # 获取用户资源
-
+        assets = Asset.objects.filter(user=user)
+        
         data = [{
             'id': asset.id,
-            'name': asset.username,
-
+            'name': asset.name,
+            'type': asset.type,
+            'url': asset.get_secure_url(),
+            'created_at': asset.created_at,
+            'thumbnail': asset.get_thumbnail_url() if asset.type == 'video' else None,
+            'description': asset.description or ''
         } for asset in assets]
 
         return Response(data)
@@ -146,14 +136,10 @@ class AssetService:
         """获取用户在 artdott.com 的资源"""
         token = self.get_access_token()
 
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
+        
 
         response = requests.get(
-            f'{self.base_url}/api/assets/',
-            headers=headers
+            f'{self.base_url}/api/assets/?token={token}',
         )
 
         if response.status_code == 200:
