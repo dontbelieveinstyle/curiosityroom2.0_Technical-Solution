@@ -40,12 +40,14 @@ class CustomJWTAuthentication(BaseAuthentication):
         # 从请求头中获取 Authorization 字段
 
         token = request.GET.get('token')
+        print(token)
         if not token:
             raise AuthenticationFailed('Authorization missing')
 
         try:
             # 使用你的密钥解码自定义 JWT token
             payload = jwt.decode(token, settings.JWT_AUTH['JWT_SECRET_KEY'], algorithms=['HS256'])
+            print(payload)
         except jwt.ExpiredSignatureError:
             raise AuthenticationFailed('Token is expired')
         except jwt.InvalidTokenError:
