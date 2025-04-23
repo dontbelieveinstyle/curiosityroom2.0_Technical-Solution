@@ -42,6 +42,7 @@ class CustomJWTAuthentication(BaseAuthentication):
         token = request.GET.get('token')
         print(token)
         if not token:
+            print('Authorization missing')
             raise AuthenticationFailed('Authorization missing')
 
         try:
@@ -49,8 +50,10 @@ class CustomJWTAuthentication(BaseAuthentication):
             payload = jwt.decode(token, settings.JWT_AUTH['JWT_SECRET_KEY'], algorithms=['HS256'])
             print(payload)
         except jwt.ExpiredSignatureError:
+            print('Token is expired')
             raise AuthenticationFailed('Token is expired')
         except jwt.InvalidTokenError:
+            print('Invalid token')
             raise AuthenticationFailed('Invalid token')
 
 
@@ -60,6 +63,7 @@ class CustomJWTAuthentication(BaseAuthentication):
         user = User.objects.filter(username=username).first()
 
         if not user:
+            print('User not found')
             raise AuthenticationFailed('User not found')
 
         return (user, token)  # 返回用户和 token
